@@ -1,0 +1,75 @@
+#!/usr/bin/env python3
+import os
+import threading
+
+from msgq.visionipc import VisionIpcServer, VisionStreamType
+from cereal import messaging
+
+from openpilot.common.realtime import Ratekeeper
+from openpilot.tools.webcam.camera import Camera
+
+# The telephoto cameras get their own VisionIPC server ("telecamerad").
+# Stream types only need to be unique per server, so we reuse the ROAD and
+# WIDE_ROAD slots instead of forking msgq to add new enum values. Clients
+# must connect with the server name "telecamerad" — on this server these
+# slots mean telephoto cam 0 and 1, not the built-in cameras.
+STREAM_SLOTS = [VisionStreamType.VISION_STREAM_ROAD, VisionStreamType.VISION_STREAM_WIDE_ROAD]
+FPS = 20
+
+
+def env_cameras():
+  cams = []
+  for idx in (0, 1):
+    dev = os.getenv(f"TELEPHOTO_CAM_{idx}")
+    if dev is not None:
+      cams.append(Camera("telephotoCameraState", STREAM_SLOTS[idx], dev,
+                         width=int(os.getenv("TELEPHOTO_WIDTH", "1920")),
+                         height=int(os.getenv("TELEPHOTO_HEIGHT", "1080")),
+                         fps=FPS, rotate_180=False))
+  return cams
+
+
+class TeleCamerad:
+  def __init__(self, cameras=None):
+    self.cameras = cameras if cameras is not None else env_cameras()
+    assert len(self.cameras) > 0, "set TELEPHOTO_CAM_0 (and optionally TELEPHOTO_CAM_1)"
+
+    self.pm = messaging.PubMaster(["telephotoCameraState"])
+    self.pm_lock = threading.Lock()
+
+    self.vipc_server = VisionIpcServer("telecamerad")
+    for idx, cam in enumerate(self.cameras):
+      self.vipc_server.create_buffers(STREAM_SLOTS[idx], 20, int(cam.W), int(cam.H))
+    self.vipc_server.start_listener()
+
+  def _send(self, idx, cam, yuv):
+    eof = int(cam.cur_frame_id * (1 / FPS) * 1e9)
+    self.vipc_server.send(STREAM_SLOTS[idx], yuv, cam.cur_frame_id, eof, eof)
+    dat = messaging.new_message("telephotoCameraState", valid=True)
+    dat.telephotoCameraState.frameId = cam.cur_frame_id
+    dat.telephotoCameraState.cameraIndex = idx
+    dat.telephotoCameraState.timestampEof = eof
+    with self.pm_lock:
+      self.pm.send("telephotoCameraState", dat)
+
+  def camera_runner(self, idx, cam):
+    rk = Ratekeeper(FPS, None)
+    for yuv in cam.read_frames():
+      self._send(idx, cam, yuv)
+      cam.cur_frame_id += 1
+      rk.keep_time()
+
+  def run(self):
+    threads = [threading.Thread(target=self.camera_runner, args=(i, c)) for i, c in enumerate(self.cameras)]
+    for t in threads:
+      t.start()
+    for t in threads:
+      t.join()
+
+
+def main():
+  TeleCamerad().run()
+
+
+if __name__ == "__main__":
+  main()
