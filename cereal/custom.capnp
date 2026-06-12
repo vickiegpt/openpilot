@@ -10,7 +10,10 @@ $Cxx.namespace("cereal");
 # DO rename the structs
 # DON'T change the identifier (e.g. @0x81c2f05a394cf4af)
 
-struct CustomReserved0 @0x81c2f05a394cf4af {
+struct TelephotoCameraState @0x81c2f05a394cf4af {
+  frameId @0 :UInt32;
+  cameraIndex @1 :UInt8;   # 0 or 1: which telephoto camera
+  timestampEof @2 :UInt64; # ns, end of frame capture
 }
 
 struct CustomReserved1 @0xaedffd8f31e7b55d {
