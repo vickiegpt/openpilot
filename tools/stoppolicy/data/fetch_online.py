@@ -152,39 +152,52 @@ def fetch(out_dir, n_target: int = 200, max_bytes: int = 500_000_000) -> int:
   # 2:1 positive:negative ratio
   pos_count = 0
   neg_count = 0
+  skipped_count = 0
+  streamed_count = 0
   target_pos = (n_target * 2) // 3   # ~2/3 positives
   target_neg = n_target - target_pos  # ~1/3 negatives
 
-  for sample in ds:
-    if saver.n >= n_target:
-      break
+  try:
+    for sample in ds:
+      streamed_count += 1
+      if saver.n >= n_target:
+        break
 
-    cat_names = _category_names_from_sample(sample, features)
-    has_light, has_sign = presence_from_categories(cat_names)
-    is_positive = has_light or has_sign
+      # Every 500 streamed samples, print progress
+      if streamed_count % 500 == 0:
+        print(f"[fetch_online] streamed {streamed_count}, saved {saver.n}, positives saved {pos_count}")
 
-    # Enforce 2:1 ratio: skip excess negatives
-    if not is_positive:
-      if neg_count >= target_neg and pos_count < target_pos:
-        continue
+      try:
+        cat_names = _category_names_from_sample(sample, features)
+        has_light, has_sign = presence_from_categories(cat_names)
+        is_positive = has_light or has_sign
 
-    # Convert image
-    img = sample["image"]
-    if not isinstance(img, Image.Image):
-      img = Image.fromarray(img)
-    rgb = _resize_longest(img, longest=448)
+        # Enforce 2:1 ratio: skip excess negatives
+        if not is_positive:
+          if neg_count >= target_neg and pos_count < target_pos:
+            continue
 
-    ok = saver.add(rgb, has_light=has_light, has_sign=has_sign)
-    if not ok:
-      break
+        # Convert image
+        img = sample["image"]
+        if not isinstance(img, Image.Image):
+          img = Image.fromarray(img)
+        rgb = _resize_longest(img, longest=448)
 
-    if is_positive:
-      pos_count += 1
-    else:
-      neg_count += 1
+        ok = saver.add(rgb, has_light=has_light, has_sign=has_sign)
+        if not ok:
+          break
 
-  saver.close()
-  print(f"[fetch_online] saved {saver.n} images ({pos_count} pos, {neg_count} neg) from {ds_id}")
+        if is_positive:
+          pos_count += 1
+        else:
+          neg_count += 1
+      except Exception:  # noqa: BLE001
+        print(f"[fetch_online] skipped sample {streamed_count - 1}")
+        skipped_count += 1
+  finally:
+    saver.close()
+
+  print(f"[fetch_online] saved {saver.n} images ({pos_count} pos, {neg_count} neg, {skipped_count} skipped) from {ds_id}")
   return saver.n
 
 
