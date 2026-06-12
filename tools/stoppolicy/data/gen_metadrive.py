@@ -66,6 +66,11 @@ def _apply_headless_patches():
   # is requested on a headless EGL context that doesn't support it.
   # Force 0 samples so the tonemapping quad is created successfully.
   from direct.filter.FilterManager import FilterManager as _FM
+
+  # Skip if already patched
+  if getattr(_FM, "_msaa_patched", False):
+    return
+
   _orig_rsi = _FM.render_scene_into
 
   def _patched_rsi(self, *args, **kwargs):
@@ -75,6 +80,7 @@ def _apply_headless_patches():
     return _orig_rsi(self, *args, **kwargs)
 
   _FM.render_scene_into = _patched_rsi
+  _FM._msaa_patched = True
 
 
 # ---------------------------------------------------------------------------
@@ -90,7 +96,7 @@ def label_for_state(ego_x, speed, light_x, light_state, future_speed):
   light_state – "green" | "red" | "yellow" | "none"
   future_speed – ego speed 1 s in the future (m/s), used as desired_speed label
   """
-  must_stop = light_state in ("red", "yellow") and ego_x < light_x
+  must_stop = light_x is not None and light_state in ("red", "yellow") and ego_x < light_x
   dist = (light_x - STOP_MARGIN) - ego_x if must_stop else -1.0
   return {
     "speed": speed,
@@ -244,6 +250,12 @@ def _spawn_light_at_odo(env, rng, target_odo, segments):
     random_seed=int(rng.integers(0, 2**31)),
     escape_random_seed_assertion=True,
   )
+  # Return the clamped odo position (odo_start + clamped lane_lon)
+  # Find the odo_start for this lane to compute actual_odo_x
+  for l, odo_start, odo_end in segments:
+    if l is lane:
+      actual_odo_x = odo_start + lane_lon
+      return light, actual_odo_x
   return light, target_odo
 
 

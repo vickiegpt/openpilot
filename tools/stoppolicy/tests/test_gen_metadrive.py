@@ -27,6 +27,18 @@ def test_plan_speed_decelerates_to_stop():
   assert plan_speed(dist_to_stop=0.0, cruise=12.0) == 0.0
 
 
+def test_labels_no_light():
+  rec = label_for_state(ego_x=10.0, speed=12.0, light_x=None, light_state="none", future_speed=12.0)
+  assert rec["stop_prob"] == 0.0
+  assert rec["dist_to_stop"] == -1.0
+  assert rec["light_state"] == "none"
+
+
+def test_labels_yellow_before_line_requires_stop():
+  rec = label_for_state(ego_x=50.0, speed=8.0, light_x=100.0, light_state="yellow", future_speed=4.0)
+  assert rec["stop_prob"] == 1.0
+
+
 @pytest.mark.slow
 def test_generate_one_episode(tmp_path):
   from tools.stoppolicy.data.gen_metadrive import generate
