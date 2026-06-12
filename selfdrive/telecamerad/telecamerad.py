@@ -6,6 +6,7 @@ from msgq.visionipc import VisionIpcServer, VisionStreamType
 from cereal import messaging
 
 from openpilot.common.realtime import Ratekeeper
+from openpilot.common.swaglog import cloudlog
 from openpilot.tools.webcam.camera import Camera
 from openpilot.selfdrive.telecamerad.recorder import TeleRecorder
 
@@ -67,14 +68,23 @@ class TeleCamerad:
     with self.pm_lock:
       self.pm.send("telephotoCameraState", dat)
     if idx in self.recorders:
-      self.recorders[idx].write(yuv, cam.cur_frame_id, eof)
+      try:
+        self.recorders[idx].write(yuv, cam.cur_frame_id, eof)
+      except Exception:
+        cloudlog.exception("telecamerad: recorder[%d] failed, disabling", idx)
+        self.recorders[idx].close()
+        del self.recorders[idx]
 
   def camera_runner(self, idx, cam):
     rk = Ratekeeper(FPS, None)
-    for yuv in cam.read_frames():
-      self._send(idx, cam, yuv)
-      cam.cur_frame_id += 1
-      rk.keep_time()
+    try:
+      for yuv in cam.read_frames():
+        self._send(idx, cam, yuv)
+        cam.cur_frame_id += 1
+        rk.keep_time()
+    finally:
+      if idx in self.recorders:
+        self.recorders[idx].close()
 
   def run(self):
     threads = [threading.Thread(target=self.camera_runner, args=(i, c)) for i, c in enumerate(self.cameras)]

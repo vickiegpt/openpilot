@@ -42,3 +42,13 @@ def test_recorder_close_is_idempotent(tmp_path):
   rec.close()
   rec.close()  # must not raise
   assert (tmp_path / "cam1_seg0000.mp4").exists()
+
+
+def test_write_after_close_is_noop(tmp_path):
+  rec = TeleRecorder(tmp_path, camera_index=0, width=W, height=H)
+  rec.write(nv12_frame(0), frame_id=0, timestamp_eof=0)
+  rec.close()
+  rec.write(nv12_frame(1), frame_id=1, timestamp_eof=50_000_000)  # must not reopen
+  assert not (tmp_path / "cam0_seg0001.mp4").exists()
+  sidecar = (tmp_path / "cam0_seg0000.jsonl").read_text().splitlines()
+  assert len(sidecar) == 1

@@ -93,3 +93,17 @@ def test_recording_enabled(tmp_path, monkeypatch):
   assert (tmp_path / "cam0_seg0000.mp4").exists()
   sidecar = (tmp_path / "cam0_seg0000.jsonl").read_text().splitlines()
   assert len(sidecar) == N_FRAMES
+
+
+def test_recorder_failure_does_not_kill_publishing(tmp_path, monkeypatch):
+  monkeypatch.setenv("TELEPHOTO_RECORD_DIR", str(tmp_path))
+  tcd = TeleCamerad(cameras=[FakeCamera()])
+  def boom(*a, **k):
+    raise OSError("disk full")
+  tcd.recorders[0].write = boom
+  sock = messaging.sub_sock('telephotoCameraState', conflate=False, timeout=100)
+  time.sleep(0.2)
+  tcd.run()  # must not raise
+  msgs = drain(sock, N_FRAMES)
+  assert len(msgs) == N_FRAMES   # publishing survived
+  assert 0 not in tcd.recorders  # recorder disabled

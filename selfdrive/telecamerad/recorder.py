@@ -25,6 +25,7 @@ class TeleRecorder:
     self.seg_idx = -1
     self.frames_in_seg = 0
     self.pts = 0
+    self.closed = False
 
   def _open_segment(self):
     self._close_segment()
@@ -33,9 +34,10 @@ class TeleRecorder:
     # fragmented mp4: footage stays decodable even if the daemon is killed mid-segment
     self.container = av.open(str(base.with_suffix(".mp4")), mode="w",
                              options={"movflags": "frag_keyframe+empty_moov"})
-    self.stream = self.container.add_stream("h264", rate=self.fps)
+    self.stream = self.container.add_stream("h264", rate=self.fps,
+                                            options={"preset": "veryfast", "tune": "zerolatency", "crf": "23"})
     self.stream.width, self.stream.height = self.w, self.h
-    self.stream.pix_fmt = "yuv420p"
+    self.stream.pix_fmt = "nv12"
     self.sidecar = open(base.with_suffix(".jsonl"), "w")
     self.frames_in_seg = 0
     self.pts = 0
@@ -51,10 +53,12 @@ class TeleRecorder:
       self.sidecar = None
 
   def write(self, nv12_bytes, frame_id, timestamp_eof):
+    if self.closed:
+      return
     if self.container is None or self.frames_in_seg >= self.segment_len_frames:
       self._open_segment()
     arr = np.frombuffer(nv12_bytes, dtype=np.uint8).reshape(self.h * 3 // 2, self.w)
-    frame = av.VideoFrame.from_ndarray(arr, format="nv12").reformat(format="yuv420p")
+    frame = av.VideoFrame.from_ndarray(arr, format="nv12")
     frame.pts = self.pts
     self.pts += 1
     for pkt in self.stream.encode(frame):
@@ -64,4 +68,7 @@ class TeleRecorder:
     self.frames_in_seg += 1
 
   def close(self):
+    if self.closed:
+      return
+    self.closed = True
     self._close_segment()
