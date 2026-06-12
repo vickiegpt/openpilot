@@ -1,8 +1,10 @@
 import time
 
 import numpy as np
+import pytest
 
 from cereal import messaging
+from msgq.visionipc import VisionIpcClient
 from openpilot.selfdrive.telecamerad.telecamerad import TeleCamerad, STREAM_SLOTS
 
 W, H = 64, 48
@@ -57,3 +59,37 @@ def test_two_cameras_run_to_completion():
     by_cam[m.telephotoCameraState.cameraIndex].append(m.telephotoCameraState.frameId)
   assert by_cam[0] == list(range(N_FRAMES))
   assert by_cam[1] == list(range(N_FRAMES))
+
+
+def test_env_cameras_requires_cam0_for_cam1(monkeypatch):
+  """TELEPHOTO_CAM_1 without TELEPHOTO_CAM_0 must raise SystemExit immediately."""
+  monkeypatch.delenv("TELEPHOTO_CAM_0", raising=False)
+  monkeypatch.setenv("TELEPHOTO_CAM_1", "/dev/video1")
+  with pytest.raises(SystemExit, match="TELEPHOTO_CAM_1 requires TELEPHOTO_CAM_0"):
+    from openpilot.selfdrive.telecamerad.telecamerad import env_cameras
+    env_cameras()
+
+
+def test_vipc_client_receives_frame():
+  """A VisionIpcClient connected to the telecamerad server must receive at least one frame."""
+  tcd = TeleCamerad(cameras=[FakeCamera()])
+  # Create client before running; connect after server is up (it already is from __init__)
+  client = VisionIpcClient("telecamerad", STREAM_SLOTS[0], False)
+  assert client.connect(True)
+
+  # Run one camera iteration on the calling thread so we stay single-threaded
+  tcd.camera_runner(0, tcd.cameras[0])
+
+  # recv with timeout — should have frames queued
+  buf = client.recv(timeout_ms=500)
+  assert buf is not None, "VisionIpcClient did not receive a frame within timeout"
+  assert client.frame_id == 0  # first frame sent
+
+
+def test_recording_enabled(tmp_path, monkeypatch):
+  monkeypatch.setenv("TELEPHOTO_RECORD_DIR", str(tmp_path))
+  tcd = TeleCamerad(cameras=[FakeCamera()])
+  tcd.run()
+  assert (tmp_path / "cam0_seg0000.mp4").exists()
+  sidecar = (tmp_path / "cam0_seg0000.jsonl").read_text().splitlines()
+  assert len(sidecar) == N_FRAMES
