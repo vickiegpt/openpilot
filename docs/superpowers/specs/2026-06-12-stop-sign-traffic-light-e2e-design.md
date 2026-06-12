@@ -66,9 +66,10 @@ to unseen roads and shrink the sim-to-real gap.
 ### New components
 
 1. **`telecamerad`** — daemon modeled on `tools/webcam/camerad.py`. Captures
-   the two USB telephoto cameras and publishes them as new VisionIPC streams.
-   Frames are logged by loggerd like any other camera, so every drive
-   produces training data.
+   the two USB telephoto cameras and publishes them on a dedicated VisionIPC
+   server. Because encoderd only encodes the built-in cameras, telecamerad
+   records its own H.264 segments (with a frameId sidecar joining footage to
+   rlogs), so every drive produces training data.
 
 2. **`stopmodeld`** — model runner modeled on
    `selfdrive/modeld/dmonitoringmodeld.py`, running on the eGPU. At ~10 Hz it
