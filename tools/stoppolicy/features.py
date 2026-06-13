@@ -74,9 +74,20 @@ class FeatureExtractor:
 
 
 def _load_images_ordered(img_dir: Path) -> np.ndarray:
-  """Load all JPGs from a directory in sorted index order -> NHWC uint8."""
+  """Load all JPGs from a directory in sorted index order -> NHWC uint8.
+
+  Images are resized to the canonical (CANONICAL_W x CANONICAL_H) at load time so
+  they can be stacked: online data is stored at longest-side-448 with preserved
+  aspect ratio, so frames vary in shape. encode() would resize anyway, so this is
+  equivalent and only makes the stack possible.
+  """
   paths = sorted(img_dir.glob("*.jpg"), key=lambda p: int(p.stem))
-  frames = [np.asarray(Image.open(p).convert("RGB")) for p in paths]
+  frames = []
+  for p in paths:
+    img = Image.open(p).convert("RGB")
+    if img.size != (CANONICAL_W, CANONICAL_H):
+      img = img.resize((CANONICAL_W, CANONICAL_H), Image.BILINEAR)
+    frames.append(np.asarray(img))
   return np.stack(frames)
 
 

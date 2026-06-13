@@ -27,3 +27,22 @@ def test_precompute_episode(fx, tmp_path):
   precompute_dir(tmp_path / "ep", fx)
   f = np.load(tmp_path / "ep" / "feats.npy")
   assert f.shape == (4, 768)
+
+
+@pytest.mark.slow
+def test_precompute_online_variable_shapes(fx, tmp_path):
+  # Online images are stored at longest-side-448 with preserved aspect ratio, so
+  # frames have varying shapes; precompute must handle (not np.stack-fail on) them.
+  import json
+  from PIL import Image
+  d = tmp_path / "online"
+  (d / "images").mkdir(parents=True)
+  shapes = [(252, 448), (448, 336), (300, 448)]  # (H, W) — all different
+  for i, (h, w) in enumerate(shapes):
+    Image.fromarray(np.random.randint(0, 255, (h, w, 3), dtype=np.uint8)).save(d / "images" / f"{i:06d}.jpg")
+  (d / "labels.jsonl").write_text(
+    "".join(json.dumps({"idx": i, "has_light": bool(i % 2), "has_sign": False}) + "\n" for i in range(3)))
+  (d / "meta.json").write_text(json.dumps({"n_images": 3, "source": "test"}))
+  precompute_dir(d, fx)
+  f = np.load(d / "feats.npy")
+  assert f.shape == (3, 768)
