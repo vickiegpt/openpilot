@@ -2549,7 +2549,7 @@ struct Event {
     # DON'T change the ID (e.g. @107)
     # DON'T change which struct it points to
     telephotoCameraState @107 :Custom.TelephotoCameraState;
-    customReserved1 @108 :Custom.CustomReserved1;
+    stopPolicy @108 :Custom.StopPolicy;
     customReserved2 @109 :Custom.CustomReserved2;
     customReserved3 @110 :Custom.CustomReserved3;
     customReserved4 @111 :Custom.CustomReserved4;

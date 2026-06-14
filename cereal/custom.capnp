@@ -16,7 +16,13 @@ struct TelephotoCameraState @0x81c2f05a394cf4af {
   timestampEof @2 :UInt64; # ns, end of frame capture
 }
 
-struct CustomReserved1 @0xaedffd8f31e7b55d {
+struct StopPolicy @0xaedffd8f31e7b55d {
+  shouldStop @0 :Bool;     # force a stop now
+  desiredSpeed @1 :Float32; # m/s, policy speed target (planner only lowers cruise to this)
+  distToStop @2 :Float32;   # meters to the stop line (-1 if not stopping)
+  stopProb @3 :Float32;     # raw sigmoid(stop_logit)
+  modelValid @4 :Bool;      # frames fresh + model ran ok
+  frameId @5 :UInt32;       # road-camera frame id this decision is for
 }
 
 struct CustomReserved2 @0xf35cc4560bbf6ec2 {

@@ -64,6 +64,7 @@ _services: dict[str, tuple] = {
   "roadCameraState": (True, 20., 20),
   "driverCameraState": (True, 20., 20),
   "telephotoCameraState": (True, 40., 40),  # 2 telephoto cams x 20Hz, fork service (CustomReserved0)
+  "stopPolicy": (True, 20., 20),  # stop policy decision, fork service (CustomReserved1)
   "driverEncodeIdx": (False, 20., 1),
   "driverStateV2": (True, 20., 10),
   "driverMonitoringState": (True, 20., 10),
