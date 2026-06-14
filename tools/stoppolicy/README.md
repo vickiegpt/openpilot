@@ -6,7 +6,7 @@ traffic lights and stop signs. Trains on one GPU from simulator + public
 ("online") data — no self-collected drives required for v1.
 
 See the design spec:
-`docs/superpowers/specs/2026-06-sign-traffic-light-e2e-design.md`
+`docs/superpowers/specs/2026-06-12-stop-sign-traffic-light-e2e-design.md`
 and the plan: `docs/superpowers/plans/2026-06-12-stop-policy-training-v1.md`.
 
 ## Setup
@@ -64,19 +64,22 @@ The model outputs, per frame: `stop_logit` (sigmoid → stop probability),
 
 ## v1 results (sim + online)
 
-Trained on 60 MetaDrive episodes (~9k frames; episode-level 80/20 split) with
-2000 COCO images as auxiliary presence supervision; 40 epochs, DINOv2 ViT-S/14
-frozen backbone, ~1M-param GRU head, single GPU. Metrics are on held-out sim
-episodes.
+Trained on 60 MetaDrive episodes (12,618 frames; episode-level 80/20 split)
+with 2000 COCO images as auxiliary presence supervision; 40 epochs, DINOv2
+ViT-S/14 frozen backbone, ~1M-param GRU head, single GPU. Metrics are for the
+best checkpoint by `stop_recall - false_stop_rate` on held-out sim episodes
+(epoch 29 in the 2026-06-14 run).
 
 | Metric | v1 | Bar |
 |--------|----|-----|
 | Stop recall | **1.000** | ≥ 0.90 |
-| False stops / window | **0.075** | ≤ 0.10 |
-| Stop-point dist MAE | **1.55 m** | ≤ 10 m |
+| False stops / window | **0.073** | ≤ 0.10 |
+| Stop-point dist MAE | **1.60 m** | ≤ 10 m |
 
 All v1 criteria met. Artifacts (gitignored): `runs/v1/best.pt`,
 `runs/v1/stop_policy.onnx`, `runs/v1/metrics.csv`, `runs/v1/norm.json`.
+The fresh data run used `281M` in `/tmp/stoppolicy_data`; exported run
+artifacts use `7.9M` in `runs/v1`.
 
 ### Caveats / next steps
 

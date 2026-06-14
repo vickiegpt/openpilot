@@ -11,6 +11,13 @@ METADRIVE_COMMIT=85e5dadc6c7436d324348f6e3d8f8e680c06b4db
 "$VENV/bin/pip" install --no-cache-dir \
   "metadrive-simulator @ https://github.com/metadriverse/metadrive/archive/${METADRIVE_COMMIT}.tar.gz" \
   "datasets>=2.19" pillow onnx onnxruntime pyarrow pytest
+if [ ! -x "$VENV/bin/pytest" ]; then
+  cat > "$VENV/bin/pytest" <<'EOF'
+#!/usr/bin/env bash
+exec "$(dirname "$0")/python" -m pytest "$@"
+EOF
+  chmod +x "$VENV/bin/pytest"
+fi
 "$VENV/bin/python" - <<'EOF'
 import torch
 assert torch.cuda.is_available(), "CUDA not visible from venv"
