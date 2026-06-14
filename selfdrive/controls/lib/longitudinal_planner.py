@@ -45,6 +45,20 @@ def limit_accel_in_turns(v_ego, angle_steers, a_target, CP):
   return [a_target[0], min(a_target[1], a_x_allowed)]
 
 
+def apply_stop_policy(v_cruise, enabled, active, fresh, model_valid, should_stop, desired_speed):
+  """Decelerate-only stop-policy effect on the cruise target.
+
+  Returns a possibly-lowered v_cruise. Never raises it. No-op unless the feature
+  is enabled+active with a fresh, valid message. Shadow mode (enabled, not active)
+  is a no-op here; the caller logs the would-be value.
+  """
+  if not (enabled and active and fresh and model_valid):
+    return v_cruise
+  if should_stop:
+    return 0.0
+  return min(v_cruise, max(0.0, desired_speed))
+
+
 class LongitudinalPlanner:
   def __init__(self, CP, init_v=0.0, init_a=0.0, dt=DT_MDL):
     self.CP = CP
@@ -62,6 +76,19 @@ class LongitudinalPlanner:
     self.v_desired_trajectory = np.zeros(CONTROL_N)
     self.a_desired_trajectory = np.zeros(CONTROL_N)
     self.j_desired_trajectory = np.zeros(CONTROL_N)
+
+    from openpilot.common.params import Params
+    self._params = Params()
+    self._sp_enabled = self._sp_get_bool("StopPolicyEnabled")
+    self._sp_active = self._sp_get_bool("StopPolicyActive")
+    self._sp_counter = 0
+
+  def _sp_get_bool(self, key):
+    """Read a bool param; return False if the key is not yet registered."""
+    try:
+      return self._params.get_bool(key)
+    except Exception:
+      return False
 
   @staticmethod
   def parse_model(model_msg):
@@ -127,6 +154,21 @@ class LongitudinalPlanner:
 
     if force_slow_decel:
       v_cruise = 0.0
+
+    # stop policy (decelerate-only, param-gated; re-read params ~1 Hz)
+    self._sp_counter += 1
+    if self._sp_counter % 20 == 0:
+      self._sp_enabled = self._sp_get_bool("StopPolicyEnabled")
+      self._sp_active = self._sp_get_bool("StopPolicyActive")
+    if self._sp_enabled and sm.seen['stopPolicy']:
+      sp = sm['stopPolicy']
+      fresh = sm.alive['stopPolicy'] and sm.valid['stopPolicy']
+      new_v = apply_stop_policy(v_cruise, self._sp_enabled, self._sp_active, fresh,
+                                sp.modelValid, sp.shouldStop, sp.desiredSpeed)
+      if self._sp_active:
+        v_cruise = new_v
+      elif fresh and sp.modelValid and new_v < v_cruise:
+        cloudlog.info(f"stopPolicy SHADOW: would set v_cruise {v_cruise:.1f} -> {new_v:.1f} (stop={sp.shouldStop})")
 
     self.mpc.set_weights(prev_accel_constraint, personality=sm['selfdriveState'].personality)
     self.mpc.set_cur_state(self.v_desired_filter.x, self.a_desired)
