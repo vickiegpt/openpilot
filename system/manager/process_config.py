@@ -9,6 +9,11 @@ from openpilot.system.manager.process import PythonProcess, NativeProcess, Daemo
 
 WEBCAM = os.getenv("USE_WEBCAM") is not None
 TELECAM = os.getenv("TELEPHOTO_CAM_0") is not None
+# Gated on the env var only: process_config has no module-level Params() instance
+# (params is passed per-call to the gate fns), so we avoid instantiating Params at
+# import time. On-device, a launch wrapper exports STOP_POLICY from the
+# StopPolicyEnabled param before manager starts.
+STOP_POLICY = os.getenv("STOP_POLICY") is not None
 
 def driverview(started: bool, params: Params, CP: car.CarParams) -> bool:
   return started or params.get_bool("IsDriverViewEnabled")
@@ -83,6 +88,7 @@ procs = [
 
   PythonProcess("modeld", "selfdrive.modeld.modeld", only_onroad),
   PythonProcess("dmonitoringmodeld", "selfdrive.modeld.dmonitoringmodeld", driverview, enabled=(WEBCAM or not PC)),
+  PythonProcess("stopmodeld", "selfdrive.stopmodeld.stopmodeld", only_onroad, enabled=STOP_POLICY),
 
   PythonProcess("sensord", "system.sensord.sensord", only_onroad, enabled=not PC),
   PythonProcess("ui", "selfdrive.ui.ui", always_run, restart_if_crash=True),
