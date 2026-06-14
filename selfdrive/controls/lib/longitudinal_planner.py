@@ -163,12 +163,15 @@ class LongitudinalPlanner:
     if self._sp_enabled and sm.seen['stopPolicy']:
       sp = sm['stopPolicy']
       fresh = sm.alive['stopPolicy'] and sm.valid['stopPolicy']
-      new_v = apply_stop_policy(v_cruise, self._sp_enabled, self._sp_active, fresh,
-                                sp.modelValid, sp.shouldStop, sp.desiredSpeed)
       if self._sp_active:
-        v_cruise = new_v
-      elif fresh and sp.modelValid and new_v < v_cruise:
-        cloudlog.info(f"stopPolicy SHADOW: would set v_cruise {v_cruise:.1f} -> {new_v:.1f} (stop={sp.shouldStop})")
+        v_cruise = apply_stop_policy(v_cruise, self._sp_enabled, True, fresh,
+                                     sp.modelValid, sp.shouldStop, sp.desiredSpeed)
+      else:
+        # shadow: compute what the active policy WOULD do (active=True), log it, don't apply
+        shadow_v = apply_stop_policy(v_cruise, self._sp_enabled, True, fresh,
+                                     sp.modelValid, sp.shouldStop, sp.desiredSpeed)
+        if shadow_v < v_cruise:
+          cloudlog.info(f"stopPolicy SHADOW: would set v_cruise {v_cruise:.1f} -> {shadow_v:.1f} (stop={sp.shouldStop})")
 
     self.mpc.set_weights(prev_accel_constraint, personality=sm['selfdriveState'].personality)
     self.mpc.set_cur_state(self.v_desired_filter.x, self.a_desired)
